@@ -240,9 +240,7 @@ final class StreamingAgentTest extends TestCase
         self::assertSame('user', $this->agent->messages[2]->role);
     }
 
-    /**
-     * @param list<StreamEvent> $middle
-     */
+    /** @param list<StreamEvent> $middle */
     #[DataProvider('blockBetweenTextProvider')]
     public function testTextBlockDoesNotCarryOverPrecedingText(string $middleType, array $middle): void
     {
@@ -272,17 +270,24 @@ final class StreamingAgentTest extends TestCase
     public static function blockBetweenTextProvider(): array
     {
         return [
-            'reasoning' => ['reasoning', [
-                new StreamEvent(StreamEvent::REASONING_DELTA, ['text' => 'R']),
-                new StreamEvent(StreamEvent::REASONING_SIGNATURE, ['signature' => 'sig']),
-            ]],
-            'redacted reasoning' => ['redacted_reasoning', [
-                new StreamEvent(StreamEvent::REASONING_REDACTED, ['data' => 'Blob==']),
-            ]],
-            'tool use' => ['tool_use', [
-                new StreamEvent(StreamEvent::TOOL_USE_START, ['id' => 'call_1', 'name' => 'article_get']),
-                new StreamEvent(StreamEvent::TOOL_USE_DELTA, ['input' => '{"id":1}']),
-            ]],
+            'reasoning' => [
+                'reasoning',
+                [
+                    new StreamEvent(StreamEvent::REASONING_DELTA, ['text' => 'R']),
+                    new StreamEvent(StreamEvent::REASONING_SIGNATURE, ['signature' => 'sig']),
+                ],
+            ],
+            'redacted reasoning' => [
+                'redacted_reasoning',
+                [new StreamEvent(StreamEvent::REASONING_REDACTED, ['data' => 'Blob=='])],
+            ],
+            'tool use' => [
+                'tool_use',
+                [
+                    new StreamEvent(StreamEvent::TOOL_USE_START, ['id' => 'call_1', 'name' => 'article_get']),
+                    new StreamEvent(StreamEvent::TOOL_USE_DELTA, ['input' => '{"id":1}']),
+                ],
+            ],
         ];
     }
 

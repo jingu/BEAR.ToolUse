@@ -14,7 +14,7 @@ use function implode;
 final readonly class LlmResponse
 {
     /**
-     * @param list<array{type: string, text?: string, id?: string, name?: string, input?: array<string, mixed>}> $content   Response content blocks
+     * @param list<array{type: string, text?: string, id?: string, name?: string, input?: array<string, mixed>, signature?: string}> $content   Response content blocks. Non-text blocks (`reasoning` etc.) are passed through to the next request unchanged
      * @param list<ToolCall>                                                                                     $toolCalls Tool calls from LLM
      */
     public function __construct(

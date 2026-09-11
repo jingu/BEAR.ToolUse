@@ -124,6 +124,57 @@ final class StreamingAgentTest extends TestCase
         self::assertSame("Looking up...\nFound it!", $events[5]->data['fullText']);
     }
 
+    public function testReasoningIsKeptInHistoryButNotEmitted(): void
+    {
+        $this->llmClient->setEventSequences([
+            [
+                new StreamEvent(StreamEvent::REASONING_DELTA, ['text' => 'The user wants article 123.']),
+                new StreamEvent(StreamEvent::REASONING_SIGNATURE, ['signature' => 'sig-abc']),
+                new StreamEvent(StreamEvent::CONTENT_BLOCK_STOP),
+                new StreamEvent(StreamEvent::TEXT_DELTA, ['text' => 'Looking up...']),
+                new StreamEvent(StreamEvent::CONTENT_BLOCK_STOP),
+                new StreamEvent(StreamEvent::MESSAGE_STOP, ['stopReason' => 'end_turn']),
+            ],
+        ]);
+
+        /** @var list<AgentEvent> $events */
+        $events = iterator_to_array($this->agent->runStream('Get article 123'));
+
+        // Reasoning must not reach the caller: only the visible text and completion
+        $types = array_map(static fn (AgentEvent $e): string => $e->type, $events);
+        self::assertSame([AgentEvent::TEXT_DELTA, AgentEvent::COMPLETED], $types);
+        self::assertSame('Looking up...', $events[1]->data['fullText']);
+
+        // ...but it must survive in the history so the next request can replay it
+        $assistant = $this->agent->messages[1];
+        self::assertSame('assistant', $assistant->role);
+        self::assertSame([
+            ['type' => 'reasoning', 'text' => 'The user wants article 123.', 'signature' => 'sig-abc'],
+            ['type' => 'text', 'text' => 'Looking up...'],
+        ], $assistant->content);
+    }
+
+    public function testReasoningWithheldTextStillKeepsSignature(): void
+    {
+        // Providers may withhold the reasoning text and return only a signature
+        $this->llmClient->setEventSequences([
+            [
+                new StreamEvent(StreamEvent::REASONING_SIGNATURE, ['signature' => 'sig-only']),
+                new StreamEvent(StreamEvent::CONTENT_BLOCK_STOP),
+                new StreamEvent(StreamEvent::TEXT_DELTA, ['text' => 'Done']),
+                new StreamEvent(StreamEvent::CONTENT_BLOCK_STOP),
+                new StreamEvent(StreamEvent::MESSAGE_STOP, ['stopReason' => 'end_turn']),
+            ],
+        ]);
+
+        iterator_to_array($this->agent->runStream('Hi'));
+
+        self::assertSame([
+            ['type' => 'reasoning', 'text' => '', 'signature' => 'sig-only'],
+            ['type' => 'text', 'text' => 'Done'],
+        ], $this->agent->messages[1]->content);
+    }
+
     public function testMaxIterationsReached(): void
     {
         $toolInput = json_encode(['id' => 1]);

@@ -7,6 +7,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [0.1.0] - Unreleased
 
 ### Added
+- `StreamEvent::REASONING_DELTA` / `StreamEvent::REASONING_SIGNATURE` so streaming clients can report the reasoning blocks that thinking-capable models emit. `StreamContentAccumulator` keeps them as `{type: 'reasoning', text, signature}` content blocks in the assistant message, which is what these models require to be replayed on the following request. Reasoning is never surfaced as an `AgentEvent`, so callers do not leak it into user-facing output; clients that do not emit these events are unaffected.
 - `ToolCallObserverInterface` invoked once per `Dispatcher` dispatch (success, status>=400, exception, unknown tool) with `ToolCall`, `ToolResult` (post-filter), and elapsed `durationMs`. `ToolUseModule` binds `NullToolCallObserver` (no-op) by default; applications can override the binding to plug in audit logging, metrics, or latency tracking.
 - Resource classes as AI agent tools via `#[Tool]` attribute
 - `#[Exclude]` attribute to exclude methods/classes from tool exposure

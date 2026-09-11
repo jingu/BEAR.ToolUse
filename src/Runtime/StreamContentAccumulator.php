@@ -17,6 +17,10 @@ use function json_decode;
  */
 final class StreamContentAccumulator
 {
+    /** Text of the block being assembled; cleared at every content-block boundary */
+    private string $blockText = '';
+
+    /** Text of the whole turn; kept for the confirmation prompt and iteration state */
     private string $currentText = '';
     private bool $needsSeparator;
     private string $stopReason = 'end_turn';
@@ -77,6 +81,7 @@ final class StreamContentAccumulator
             $this->needsSeparator = false;
         }
 
+        $this->blockText .= $text;
         $this->currentText .= $text;
         $this->fullText .= $text;
         $events[] = AgentEvent::textDelta($text);
@@ -142,6 +147,7 @@ final class StreamContentAccumulator
     private function handleContentBlockStop(): array
     {
         $this->finalizeContentBlock();
+        $this->blockText = '';
         $this->currentToolId = '';
         $this->currentToolName = '';
         $this->currentToolInputJson = '';
@@ -201,11 +207,11 @@ final class StreamContentAccumulator
             return;
         }
 
-        if ($this->currentText === '') {
+        if ($this->blockText === '') {
             return;
         }
 
-        $this->contentBlocks[] = ['type' => 'text', 'text' => $this->currentText];
+        $this->contentBlocks[] = ['type' => 'text', 'text' => $this->blockText];
     }
 
     private function eventString(StreamEvent $event, string $key, string $default = ''): string

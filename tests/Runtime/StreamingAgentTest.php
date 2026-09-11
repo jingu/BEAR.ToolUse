@@ -14,6 +14,7 @@ use BEAR\ToolUse\Fake\FakeThrowingDispatcher;
 use BEAR\ToolUse\Llm\StreamEvent;
 use BEAR\ToolUse\Schema\Tool;
 use PHPUnit\Framework\Attributes\CoversClass;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Ray\Di\Injector;
 
@@ -237,6 +238,52 @@ final class StreamingAgentTest extends TestCase
 
         // ...and the tool result follows it, so the next request replays both
         self::assertSame('user', $this->agent->messages[2]->role);
+    }
+
+    /**
+     * @param list<StreamEvent> $middle
+     */
+    #[DataProvider('blockBetweenTextProvider')]
+    public function testTextBlockDoesNotCarryOverPrecedingText(string $middleType, array $middle): void
+    {
+        $this->llmClient->setEventSequences([
+            [
+                new StreamEvent(StreamEvent::TEXT_DELTA, ['text' => 'A']),
+                new StreamEvent(StreamEvent::CONTENT_BLOCK_STOP),
+                ...$middle,
+                new StreamEvent(StreamEvent::CONTENT_BLOCK_STOP),
+                new StreamEvent(StreamEvent::TEXT_DELTA, ['text' => 'B']),
+                new StreamEvent(StreamEvent::CONTENT_BLOCK_STOP),
+                new StreamEvent(StreamEvent::MESSAGE_STOP, ['stopReason' => 'end_turn']),
+            ],
+        ]);
+
+        iterator_to_array($this->agent->runStream('Hi'));
+
+        $content = $this->agent->messages[1]->content;
+        self::assertCount(3, $content);
+        self::assertSame(['type' => 'text', 'text' => 'A'], $content[0]);
+        self::assertSame($middleType, $content[1]['type']);
+        // The trailing block must be 'B', not 'AB': each block owns only its own text
+        self::assertSame(['type' => 'text', 'text' => 'B'], $content[2]);
+    }
+
+    /** @return array<string, array{0: string, 1: list<StreamEvent>}> */
+    public static function blockBetweenTextProvider(): array
+    {
+        return [
+            'reasoning' => ['reasoning', [
+                new StreamEvent(StreamEvent::REASONING_DELTA, ['text' => 'R']),
+                new StreamEvent(StreamEvent::REASONING_SIGNATURE, ['signature' => 'sig']),
+            ]],
+            'redacted reasoning' => ['redacted_reasoning', [
+                new StreamEvent(StreamEvent::REASONING_REDACTED, ['data' => 'Blob==']),
+            ]],
+            'tool use' => ['tool_use', [
+                new StreamEvent(StreamEvent::TOOL_USE_START, ['id' => 'call_1', 'name' => 'article_get']),
+                new StreamEvent(StreamEvent::TOOL_USE_DELTA, ['input' => '{"id":1}']),
+            ]],
+        ];
     }
 
     public function testMaxIterationsReached(): void

@@ -183,6 +183,46 @@ final class StreamingAgentConfirmationTest extends TestCase
         self::assertSame('Deleting article 42.', $confirmEvents[0]->data['message']);
     }
 
+    public function testConfirmationPromptKeepsTheWholeTurnText(): void
+    {
+        // The prompt shows what the model said this turn. A reasoning block
+        // between two text blocks must not truncate it to the last block.
+        $agent = $this->createAgentWithConfirmableTool();
+
+        $this->llmClient->setEventSequences([
+            [
+                new StreamEvent(StreamEvent::TEXT_DELTA, ['text' => 'Let me check. ']),
+                new StreamEvent(StreamEvent::CONTENT_BLOCK_STOP),
+                new StreamEvent(StreamEvent::REASONING_DELTA, ['text' => 'The user asked to delete it.']),
+                new StreamEvent(StreamEvent::CONTENT_BLOCK_STOP),
+                new StreamEvent(StreamEvent::TEXT_DELTA, ['text' => 'Deleting now.']),
+                new StreamEvent(StreamEvent::CONTENT_BLOCK_STOP),
+                new StreamEvent(StreamEvent::TOOL_USE_START, ['id' => 'call_42', 'name' => 'article_delete']),
+                new StreamEvent(StreamEvent::TOOL_USE_DELTA, ['input' => json_encode(['id' => 42])]),
+                new StreamEvent(StreamEvent::CONTENT_BLOCK_STOP),
+                new StreamEvent(StreamEvent::MESSAGE_STOP, ['stopReason' => 'tool_use']),
+            ],
+            [
+                new StreamEvent(StreamEvent::TEXT_DELTA, ['text' => 'Cancelled.']),
+                new StreamEvent(StreamEvent::CONTENT_BLOCK_STOP),
+                new StreamEvent(StreamEvent::MESSAGE_STOP, ['stopReason' => 'end_turn']),
+            ],
+        ]);
+
+        $events = $this->consumeWithConfirmation($agent->runStream('Delete article 42'), false);
+
+        $prompt = null;
+        foreach ($events as $event) {
+            if ($event->type !== AgentEvent::CONFIRMATION_REQUIRED) {
+                continue;
+            }
+
+            $prompt = $event->data['message'];
+        }
+
+        self::assertSame('Let me check. Deleting now.', $prompt);
+    }
+
     public function testConfirmationRequiredJsonSerialize(): void
     {
         $event = AgentEvent::confirmationRequired('delete_user', 'call_1', ['id' => 1], 'Delete user?');

@@ -6,6 +6,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [0.1.0] - Unreleased
 
+### Fixed
+- `StreamContentAccumulator` no longer carries the text of an earlier content block into a later one. A turn shaped `text` → `tool_use` → `text` stored the trailing block as the concatenation of both texts, because the only text buffer was never cleared at a block boundary. Block text and turn text are now separate buffers, so each content block owns just its own text while the confirmation prompt still receives the whole turn.
+
 ### Added
 - `StreamEvent::REASONING_DELTA`, `StreamEvent::REASONING_SIGNATURE` and `StreamEvent::REASONING_REDACTED` so streaming clients can report the reasoning blocks that thinking-capable models emit. `StreamContentAccumulator` keeps them as `{type: 'reasoning', text, signature}` and `{type: 'redacted_reasoning', data}` content blocks in the assistant message, which is what these models require to be replayed unchanged on the following request. Safety-redacted reasoning keeps its own block type because it carries opaque encrypted data rather than text, and collapsing it into a regular block breaks the multi-turn protocol. Reasoning is never surfaced as an `AgentEvent`, so callers do not leak it into user-facing output; clients that do not emit these events are unaffected.
 - `ToolCallObserverInterface` invoked once per `Dispatcher` dispatch (success, status>=400, exception, unknown tool) with `ToolCall`, `ToolResult` (post-filter), and elapsed `durationMs`. `ToolUseModule` binds `NullToolCallObserver` (no-op) by default; applications can override the binding to plug in audit logging, metrics, or latency tracking.

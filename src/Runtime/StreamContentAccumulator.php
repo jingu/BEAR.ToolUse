@@ -25,6 +25,7 @@ final class StreamContentAccumulator
     private string $currentToolInputJson = '';
     private string $currentReasoning = '';
     private string $currentReasoningSignature = '';
+    private string $currentRedactedReasoning = '';
 
     /** @var list<PendingToolCall> */
     private array $pendingToolCalls = [];
@@ -44,6 +45,7 @@ final class StreamContentAccumulator
             StreamEvent::TEXT_DELTA => $this->handleTextDelta($event),
             StreamEvent::REASONING_DELTA => $this->handleReasoningDelta($event),
             StreamEvent::REASONING_SIGNATURE => $this->handleReasoningSignature($event),
+            StreamEvent::REASONING_REDACTED => $this->handleReasoningRedacted($event),
             StreamEvent::TOOL_USE_START => $this->handleToolUseStart($event),
             StreamEvent::TOOL_USE_DELTA => $this->handleToolUseDelta($event),
             StreamEvent::CONTENT_BLOCK_STOP => $this->handleContentBlockStop(),
@@ -104,6 +106,20 @@ final class StreamContentAccumulator
         return [];
     }
 
+    /**
+     * Safety-redacted reasoning arrives as opaque encrypted data instead of text.
+     * It is a distinct block type that must round-trip unchanged, so it is kept
+     * apart from regular reasoning rather than folded into it.
+     *
+     * @return list<AgentEvent>
+     */
+    private function handleReasoningRedacted(StreamEvent $event): array
+    {
+        $this->currentRedactedReasoning .= $this->eventString($event, 'data');
+
+        return [];
+    }
+
     /** @return list<AgentEvent> */
     private function handleToolUseStart(StreamEvent $event): array
     {
@@ -131,6 +147,7 @@ final class StreamContentAccumulator
         $this->currentToolInputJson = '';
         $this->currentReasoning = '';
         $this->currentReasoningSignature = '';
+        $this->currentRedactedReasoning = '';
 
         return [];
     }
@@ -145,6 +162,15 @@ final class StreamContentAccumulator
 
     private function finalizeContentBlock(): void
     {
+        if ($this->currentRedactedReasoning !== '') {
+            $this->contentBlocks[] = [
+                'type' => 'redacted_reasoning',
+                'data' => $this->currentRedactedReasoning,
+            ];
+
+            return;
+        }
+
         // A reasoning block carries a signature even when its text is withheld
         // by the provider, and the model needs both back to continue the turn
         if ($this->currentReasoning !== '' || $this->currentReasoningSignature !== '') {

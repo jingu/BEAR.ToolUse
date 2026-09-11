@@ -213,12 +213,20 @@ assistant message for you:
 yield new StreamEvent(StreamEvent::REASONING_DELTA, ['text' => $delta]);
 yield new StreamEvent(StreamEvent::REASONING_SIGNATURE, ['signature' => $signature]);
 yield new StreamEvent(StreamEvent::CONTENT_BLOCK_STOP);
+
+// Safety-redacted reasoning carries opaque encrypted data instead of text
+yield new StreamEvent(StreamEvent::REASONING_REDACTED, ['data' => $data]);
+yield new StreamEvent(StreamEvent::CONTENT_BLOCK_STOP);
 ```
 
 The accumulator stores them as `['type' => 'reasoning', 'text' => ..., 'signature' => ...]`
-content blocks. Some providers withhold the reasoning text and return only a
-signature; the block is kept either way, since the signature alone is what the
-model needs back.
+and `['type' => 'redacted_reasoning', 'data' => ...]` content blocks. Some
+providers withhold the reasoning text and return only a signature; the block is
+kept either way, since the signature alone is what the model needs back.
+
+Redacted reasoning keeps a block type of its own on purpose: it must round-trip
+unchanged, and folding it into a regular reasoning block would lose the
+distinction the model relies on.
 
 Reasoning is **not** emitted as an `AgentEvent`, so it never reaches SSE
 consumers by accident. Clients that do not emit these events are unaffected.
